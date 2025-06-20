@@ -17,7 +17,7 @@ func testGlobalLogging() async throws {
     log.forceFlushLogs()
 
     // Wait a bit for async operations
-    try await Task.sleep(for: .milliseconds(200))
+    try await Task.sleep(for: .milliseconds(300))
 
     let logContents = log.getLogFileContents()
     #expect(logContents != nil, "Log file should contain content")
@@ -106,18 +106,67 @@ func testStackTraceCapture() async throws {
     }
 }
 
-@Test("Sensitive data redaction works correctly", arguments: [
-    ("Credit card: 4532-1234-5678-9012", "[REDACTED_CARD]"),
-    ("Email: user@example.com", "[REDACTED_EMAIL]"),
-    ("Phone: 555-123-4567", "[REDACTED_PHONE]"),
-    ("Password: secret123", "[REDACTED_PASSWORD]"),
-    ("API Key: abc123xyz789", "[REDACTED_API_KEY]"),
-    ("IP: 192.168.1.1", "[REDACTED_IP]")
-])
-func testSensitiveDataRedaction(input: String, expectedRedaction: String) async throws {
+@Test("Explicit redaction works correctly")
+func testExplicitRedaction() async throws {
     log.clearLogFile()
 
-    log.info(input)
+    let email = "john.doe@example.com"
+    let password = "secret123"
+    let apiKey = "sk_live_abc123def456"
+
+    // Log with explicit redaction
+    log.info("User login: email=\(Redacted.email(email)), password=\(Redacted.password(password))")
+    log.info("API call with key: \(redact(apiKey, as: "[REDACTED_API_KEY]"))")
+
+    log.forceFlushLogs()
+    try await Task.sleep(for: .milliseconds(200))
+
+    let logContents = log.getLogFileContents()
+    #expect(logContents != nil, "Log file should contain content")
+
+    if let contents = logContents {
+        // File should contain redacted versions
+        #expect(contents.contains("[REDACTED_EMAIL]"), "File should contain redacted email")
+        #expect(contents.contains("[REDACTED_PASSWORD]"), "File should contain redacted password")
+        #expect(contents.contains("[REDACTED_API_KEY]"), "File should contain redacted API key")
+
+        // File should NOT contain original values
+        #expect(!contents.contains(email), "File should not contain original email")
+        #expect(!contents.contains(password), "File should not contain original password")
+        #expect(!contents.contains(apiKey), "File should not contain original API key")
+    }
+}
+
+@Test("Console vs File redaction difference")
+func testConsoleVsFileRedaction() async throws {
+    log.clearLogFile()
+
+    let sensitiveData = "password123"
+    let message = "Login attempt with password: \(redact(sensitiveData, as: "[HIDDEN]"))"
+
+    log.info(message)
+    log.forceFlushLogs()
+    try await Task.sleep(for: .milliseconds(200))
+
+    let fileContents = log.getLogFileContents()
+    #expect(fileContents != nil)
+
+    if let contents = fileContents {
+        // File should have redacted version
+        #expect(contents.contains("[HIDDEN]"), "File should contain placeholder")
+        #expect(!contents.contains("password123"), "File should not contain actual password")
+
+        // Note: We can't easily test console output in unit tests,
+        // but the console would show the full message with "password123"
+    }
+}
+
+@Test("No redaction preserves original message")
+func testNoRedaction() async throws {
+    log.clearLogFile()
+
+    let normalMessage = "User logged in successfully"
+    log.info(normalMessage)
 
     log.forceFlushLogs()
     try await Task.sleep(for: .milliseconds(200))
@@ -126,12 +175,55 @@ func testSensitiveDataRedaction(input: String, expectedRedaction: String) async 
     #expect(logContents != nil)
 
     if let contents = logContents {
-        #expect(contents.contains(expectedRedaction), "Should contain redacted version")
-        // Ensure original sensitive data is not present
-        let sensitiveValue = input.components(separatedBy: ": ").last ?? ""
-        if !sensitiveValue.isEmpty && !sensitiveValue.contains("redacted") {
-            #expect(!contents.contains(sensitiveValue), "Should not contain original sensitive data")
-        }
+        #expect(contents.contains(normalMessage), "Should contain original message when no redaction is used")
+    }
+}
+
+@Test("Multiple redaction types in one message")
+func testMultipleRedactionTypes() async throws {
+    log.clearLogFile()
+
+    let email = "user@example.com"
+    let creditCard = "4532-1234-5678-9012"
+    let phone = "555-123-4567"
+
+    log.info("Payment info: email=\(Redacted.email(email)), card=\(Redacted.creditCard(creditCard)), phone=\(Redacted.phone(phone))")
+
+    log.forceFlushLogs()
+    try await Task.sleep(for: .milliseconds(200))
+
+    let logContents = log.getLogFileContents()
+    #expect(logContents != nil)
+
+    if let contents = logContents {
+        // Should contain all redacted placeholders
+        #expect(contents.contains("[REDACTED_EMAIL]"))
+        #expect(contents.contains("[REDACTED_CARD]"))
+        #expect(contents.contains("[REDACTED_PHONE]"))
+
+        // Should not contain original values
+        #expect(!contents.contains(email))
+        #expect(!contents.contains(creditCard))
+        #expect(!contents.contains(phone))
+    }
+}
+
+@Test("Custom redaction placeholder")
+func testCustomRedactionPlaceholder() async throws {
+    log.clearLogFile()
+
+    let secretValue = "top_secret_data"
+    log.info("Processing: \(redact(secretValue, as: "[CLASSIFIED]"))")
+
+    log.forceFlushLogs()
+    try await Task.sleep(for: .milliseconds(200))
+
+    let logContents = log.getLogFileContents()
+    #expect(logContents != nil)
+
+    if let contents = logContents {
+        #expect(contents.contains("[CLASSIFIED]"), "Should contain custom placeholder")
+        #expect(!contents.contains(secretValue), "Should not contain original value")
     }
 }
 

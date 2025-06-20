@@ -11,7 +11,7 @@ internal final class CHLogger {
     private let fileManager = FileManager.default
     private var logFileURL: URL
     private let dateFormatter: DateFormatter
-    private let logQueue = DispatchQueue(label: "com.applogger.logging", qos: .utility, attributes: .concurrent)
+    private let logQueue = DispatchQueue(label: "com.applogger.logging", qos: .default)
     private let fileWriteQueue = DispatchQueue(label: "com.applogger.filewrite", qos: .utility)
 
     // Log level filtering
@@ -109,22 +109,19 @@ internal final class CHLogger {
 
     // MARK: - Batched Writing
     private func flushBufferIfNeeded(force: Bool = false) {
-        fileWriteQueue.async { [weak self] in
-            guard let self = self else { return }
+        // This method should only be called from fileWriteQueue
+        let shouldFlush = force ||
+        self.logBuffer.count >= self.bufferSize ||
+        Date().timeIntervalSince(self.lastFlushTime) >= self.maxFlushInterval
 
-            let shouldFlush = force ||
-            self.logBuffer.count >= self.bufferSize ||
-            Date().timeIntervalSince(self.lastFlushTime) >= self.maxFlushInterval
+        guard shouldFlush && !self.logBuffer.isEmpty else { return }
 
-            guard shouldFlush && !self.logBuffer.isEmpty else { return }
+        let logsToWrite = self.logBuffer.joined()
+        self.logBuffer.removeAll()
+        self.lastFlushTime = Date()
 
-            let logsToWrite = self.logBuffer.joined()
-            self.logBuffer.removeAll()
-            self.lastFlushTime = Date()
-
-            self.writeToFile(message: logsToWrite)
-            self.rotateLogFileIfNeeded()
-        }
+        self.writeToFile(message: logsToWrite)
+        self.rotateLogFileIfNeeded()
     }
 
     // MARK: - Data Redaction
@@ -169,38 +166,82 @@ internal final class CHLogger {
         // Filter logs based on minimum level
         guard level.rawValue >= minimumLogLevel.rawValue else { return }
 
-        // Perform all logging operations on dedicated queue to avoid blocking caller
-        logQueue.async { [weak self] in
-            guard let self = self else { return }
+        let timestamp = self.dateFormatter.string(from: Date())
 
-            let timestamp = self.dateFormatter.string(from: Date())
-            let redactedMessage = self.redactSensitiveData(message)
+        // Create console message (shows full values)
+        let consoleMessage = createConsoleMessage(message)
+        var formattedConsoleMessage = "\(level.emoji) [\(className)] \(consoleMessage)"
 
-            var formattedMessage = "\(level.emoji) [\(className)] \(redactedMessage)"
+        // Create file message (with redacted values)
+        let fileMessage = createFileMessage(message)
+        var formattedFileMessage = "\(level.emoji) [\(className)] \(fileMessage)"
 
-            // Add metadata if provided
-            if !metadata.isEmpty {
-                let metadataString = metadata.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
-                formattedMessage += " | \(metadataString)"
-            }
-
-            // Add stack trace for errors if requested
-            var stackTrace = ""
-            if includeStackTrace && (level == .error || level == .critical) {
-                stackTrace = "\n" + Thread.callStackSymbols.dropFirst(3).prefix(10).joined(separator: "\n")
-                formattedMessage += stackTrace
-            }
-
-            // Log to OS Logger
-            self.osLogger.log(level: level.osLogType, "\(formattedMessage)")
-
-            // Add to buffer for file writing
-            let fileLogMessage = "[\(timestamp)] \(level.rawValue) \(formattedMessage)\n"
-            self.fileWriteQueue.async {
-                self.logBuffer.append(fileLogMessage)
-                self.flushBufferIfNeeded()
-            }
+        // Add metadata if provided
+        if !metadata.isEmpty {
+            let metadataString = metadata.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
+            formattedConsoleMessage += " | \(metadataString)"
+            formattedFileMessage += " | \(metadataString)"
         }
+
+        // Add stack trace for errors if requested
+        if includeStackTrace && (level == .error || level == .critical) {
+            let stackTrace = "\n" + Thread.callStackSymbols.dropFirst(3).prefix(10).joined(separator: "\n")
+            formattedConsoleMessage += stackTrace
+            formattedFileMessage += stackTrace
+        }
+
+        // Log to OS Logger (console - shows full values)
+        logQueue.async { [weak self, formattedConsoleMessage] in
+            self?.osLogger.log(level: level.osLogType, "\(formattedConsoleMessage)")
+        }
+
+        // Add to buffer for file writing (redacted version)
+        let fileLogMessage = "[\(timestamp)] \(level.rawValue) \(formattedFileMessage)\n"
+        fileWriteQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.logBuffer.append(fileLogMessage)
+            self.flushBufferIfNeeded()
+        }
+    }
+
+    private func createConsoleMessage(_ message: String) -> String {
+        let pattern = "<<REDACT_([^_]+)_(.+?)_(.+?)>>"
+        let regex = try! NSRegularExpression(pattern: pattern, options: [])
+        let nsString = message as NSString
+        let range = NSRange(location: 0, length: nsString.length)
+
+        var result = message
+        let matches = regex.matches(in: message, options: [], range: range)
+
+        // Process matches in reverse order to avoid index shifting
+        for match in matches.reversed() {
+            let fullRange = match.range
+            let valueRange = match.range(at: 2)
+            let value = nsString.substring(with: valueRange)
+            result = (result as NSString).replacingCharacters(in: fullRange, with: value)
+        }
+
+        return result
+    }
+
+    private func createFileMessage(_ message: String) -> String {
+        let pattern = "<<REDACT_([^_]+)_(.+?)_(.+?)>>"
+        let regex = try! NSRegularExpression(pattern: pattern, options: [])
+        let nsString = message as NSString
+        let range = NSRange(location: 0, length: nsString.length)
+
+        var result = message
+        let matches = regex.matches(in: message, options: [], range: range)
+
+        // Process matches in reverse order to avoid index shifting
+        for match in matches.reversed() {
+            let fullRange = match.range
+            let placeholderRange = match.range(at: 3)
+            let placeholder = nsString.substring(with: placeholderRange)
+            result = (result as NSString).replacingCharacters(in: fullRange, with: placeholder)
+        }
+
+        return result
     }
 
     private func writeToFile(message: String) {
@@ -265,7 +306,7 @@ extension CHLogger {
     }
 
     internal func clearLogFile() {
-        fileWriteQueue.async { [weak self] in
+        fileWriteQueue.sync { [weak self] in
             guard let self = self else { return }
 
             // Clear buffer first
@@ -286,6 +327,9 @@ extension CHLogger {
     }
 
     internal func forceFlushLogs() {
-        flushBufferIfNeeded(force: true)
+        fileWriteQueue.sync { [weak self] in
+            guard let self = self else { return }
+            self.flushBufferIfNeeded(force: true)
+        }
     }
 }
