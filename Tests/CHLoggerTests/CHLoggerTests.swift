@@ -33,10 +33,14 @@ struct CHLoggerCoreTests {
         #expect(logContents != nil, "Log file should contain content")
 
         if let contents = logContents {
-            #expect(contents.contains("💙 [CHLoggerTests] Test info message"))
-            #expect(contents.contains("❤️ [CHLoggerTests] Test error message"))
-            #expect(contents.contains("🐛 [CHLoggerTests] Test debug message"))
-            #expect(contents.contains("⚠️ [CHLoggerTests] Test warning message"))
+            #expect(contents.contains("💙 [CHLoggerTests:"))
+            #expect(contents.contains("❤️ [CHLoggerTests:"))
+            #expect(contents.contains("🐛 [CHLoggerTests:"))
+            #expect(contents.contains("⚠️ [CHLoggerTests:"))
+            #expect(contents.contains("Test info message"))
+            #expect(contents.contains("Test error message"))
+            #expect(contents.contains("Test debug message"))
+            #expect(contents.contains("Test warning message"))
         }
     }
 
@@ -90,8 +94,8 @@ struct CHLoggerCoreTests {
         if let contents = logContents {
             #expect(!contents.contains("This should not appear"))
             #expect(contents.contains("This should appear"))
-            #expect(contents.contains("⚠️ [CHLoggerTests] This should appear"))
-            #expect(contents.contains("❤️ [CHLoggerTests] This should appear"))
+            #expect(contents.contains("⚠️ [CHLoggerTests:"))
+            #expect(contents.contains("❤️ [CHLoggerTests:"))
         }
 
         // Reset to debug level for other tests
@@ -400,6 +404,7 @@ struct CHLoggerFileManagementTests {
         if let info = infoEntry {
             #expect(info.message.contains("Test parsing message"))
             #expect(info.className == "CHLoggerTests")
+            #expect(info.lineNumber != nil, "Line number should be present")
             #expect(info.emoji == "💙")
         }
 

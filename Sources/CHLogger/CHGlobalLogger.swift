@@ -19,29 +19,29 @@ public struct GlobalLogger: Sendable {
         CHLogger.shared.getMinimumLogLevel()
     }
 
-    public func debug(_ message: String, metadata: [String: Any] = [:], file: String = #file) {
+    public func debug(_ message: String, metadata: [String: Any] = [:], file: String = #file, line: Int = #line) {
         let className = extractClassName(from: file)
-        CHLogger.shared.debug(message, fromClassName: className, metadata: metadata)
+        CHLogger.shared.debug(message, fromClassName: className, lineNumber: line, metadata: metadata)
     }
 
-    public func info(_ message: String, metadata: [String: Any] = [:], file: String = #file) {
+    public func info(_ message: String, metadata: [String: Any] = [:], file: String = #file, line: Int = #line) {
         let className = extractClassName(from: file)
-        CHLogger.shared.info(message, fromClassName: className, metadata: metadata)
+        CHLogger.shared.info(message, fromClassName: className, lineNumber: line, metadata: metadata)
     }
 
-    public func warning(_ message: String, metadata: [String: Any] = [:], file: String = #file) {
+    public func warning(_ message: String, metadata: [String: Any] = [:], file: String = #file, line: Int = #line) {
         let className = extractClassName(from: file)
-        CHLogger.shared.warning(message, fromClassName: className, metadata: metadata)
+        CHLogger.shared.warning(message, fromClassName: className, lineNumber: line, metadata: metadata)
     }
 
-    public func error(_ message: String, metadata: [String: Any] = [:], includeStackTrace: Bool = false, file: String = #file) {
+    public func error(_ message: String, metadata: [String: Any] = [:], includeStackTrace: Bool = false, file: String = #file, line: Int = #line) {
         let className = extractClassName(from: file)
-        CHLogger.shared.error(message, fromClassName: className, metadata: metadata, includeStackTrace: includeStackTrace)
+        CHLogger.shared.error(message, fromClassName: className, lineNumber: line, metadata: metadata, includeStackTrace: includeStackTrace)
     }
 
-    public func critical(_ message: String, metadata: [String: Any] = [:], includeStackTrace: Bool = true, file: String = #file) {
+    public func critical(_ message: String, metadata: [String: Any] = [:], includeStackTrace: Bool = true, file: String = #file, line: Int = #line) {
         let className = extractClassName(from: file)
-        CHLogger.shared.critical(message, fromClassName: className, metadata: metadata, includeStackTrace: includeStackTrace)
+        CHLogger.shared.critical(message, fromClassName: className, lineNumber: line, metadata: metadata, includeStackTrace: includeStackTrace)
     }
 
     private func extractClassName(from filePath: String) -> String {

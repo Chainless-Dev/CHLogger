@@ -162,19 +162,22 @@ internal final class CHLogger {
         return className
     }
 
-    private func log(level: LogLevel, message: String, className: String, metadata: [String: Any] = [:], includeStackTrace: Bool = false) {
+    private func log(level: LogLevel, message: String, className: String, lineNumber: Int?, metadata: [String: Any] = [:], includeStackTrace: Bool = false) {
         // Filter logs based on minimum level
         guard level.rawValue >= minimumLogLevel.rawValue else { return }
 
         let timestamp = self.dateFormatter.string(from: Date())
+        
+        // Format class name with line number
+        let classInfo = lineNumber != nil ? "[\(className):\(lineNumber!)]" : "[\(className)]"
 
         // Create console message (shows full values)
         let consoleMessage = createConsoleMessage(message)
-        var formattedConsoleMessage = "\(level.emoji) [\(className)] \(consoleMessage)"
+        var formattedConsoleMessage = "\(level.emoji) \(classInfo) \(consoleMessage)"
 
         // Create file message (with redacted values)
         let fileMessage = createFileMessage(message)
-        var formattedFileMessage = "\(level.emoji) [\(className)] \(fileMessage)"
+        var formattedFileMessage = "\(level.emoji) \(classInfo) \(fileMessage)"
 
         // Add metadata if provided
         if !metadata.isEmpty {
@@ -257,24 +260,24 @@ internal final class CHLogger {
 
 // MARK: - Internal Logging Methods
 extension CHLogger {
-    internal func debug(_ message: String, fromClassName className: String, metadata: [String: Any] = [:]) {
-        log(level: .debug, message: message, className: className, metadata: metadata)
+    internal func debug(_ message: String, fromClassName className: String, lineNumber: Int? = nil, metadata: [String: Any] = [:]) {
+        log(level: .debug, message: message, className: className, lineNumber: lineNumber, metadata: metadata)
     }
 
-    internal func info(_ message: String, fromClassName className: String, metadata: [String: Any] = [:]) {
-        log(level: .info, message: message, className: className, metadata: metadata)
+    internal func info(_ message: String, fromClassName className: String, lineNumber: Int? = nil, metadata: [String: Any] = [:]) {
+        log(level: .info, message: message, className: className, lineNumber: lineNumber, metadata: metadata)
     }
 
-    internal func warning(_ message: String, fromClassName className: String, metadata: [String: Any] = [:]) {
-        log(level: .warning, message: message, className: className, metadata: metadata)
+    internal func warning(_ message: String, fromClassName className: String, lineNumber: Int? = nil, metadata: [String: Any] = [:]) {
+        log(level: .warning, message: message, className: className, lineNumber: lineNumber, metadata: metadata)
     }
 
-    internal func error(_ message: String, fromClassName className: String, metadata: [String: Any] = [:], includeStackTrace: Bool = false) {
-        log(level: .error, message: message, className: className, metadata: metadata, includeStackTrace: includeStackTrace)
+    internal func error(_ message: String, fromClassName className: String, lineNumber: Int? = nil, metadata: [String: Any] = [:], includeStackTrace: Bool = false) {
+        log(level: .error, message: message, className: className, lineNumber: lineNumber, metadata: metadata, includeStackTrace: includeStackTrace)
     }
 
-    internal func critical(_ message: String, fromClassName className: String, metadata: [String: Any] = [:], includeStackTrace: Bool = true) {
-        log(level: .critical, message: message, className: className, metadata: metadata, includeStackTrace: includeStackTrace)
+    internal func critical(_ message: String, fromClassName className: String, lineNumber: Int? = nil, metadata: [String: Any] = [:], includeStackTrace: Bool = true) {
+        log(level: .critical, message: message, className: className, lineNumber: lineNumber, metadata: metadata, includeStackTrace: includeStackTrace)
     }
 }
 

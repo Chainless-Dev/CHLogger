@@ -11,12 +11,13 @@ public struct LogEntry {
     public let timestamp: Date
     public let level: LogLevel
     public let className: String
+    public let lineNumber: Int?
     public let message: String
     public let emoji: String
 
     static func parse(from line: String) -> LogEntry? {
-        // Parse format: [timestamp] LEVEL emoji [ClassName] message
-        let pattern = #"\[(.*?)\] (\w+) (.*?) \[(.*?)\] (.*)"#
+        // Parse format: [timestamp] LEVEL emoji [ClassName:lineNumber] message or [timestamp] LEVEL emoji [ClassName] message
+        let pattern = #"\[(.*?)\] (\w+) (.*?) \[(.*?)(?::(\d+))?\] (.*)"#
 
         guard let regex = try? NSRegularExpression(pattern: pattern),
               let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) else {
@@ -27,7 +28,17 @@ public struct LogEntry {
         let levelStr = String(line[Range(match.range(at: 2), in: line)!])
         let emoji = String(line[Range(match.range(at: 3), in: line)!])
         let className = String(line[Range(match.range(at: 4), in: line)!])
-        let message = String(line[Range(match.range(at: 5), in: line)!])
+        
+        // Check if line number exists (group 5)
+        let lineNumber: Int?
+        if match.range(at: 5).location != NSNotFound {
+            let lineNumStr = String(line[Range(match.range(at: 5), in: line)!])
+            lineNumber = Int(lineNumStr)
+        } else {
+            lineNumber = nil
+        }
+        
+        let message = String(line[Range(match.range(at: 6), in: line)!])
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
@@ -51,6 +62,7 @@ public struct LogEntry {
             timestamp: timestamp,
             level: level,
             className: className,
+            lineNumber: lineNumber,
             message: message,
             emoji: emoji
         )
